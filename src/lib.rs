@@ -22,6 +22,13 @@ pub fn init() {
     wasm_logger::init(wasm_logger::Config::default());
 }
 
+/// Universal Constants
+const PERMITTIVITY: f32 = 8.8541878e-12; // Vacuum Permittivity [C/(V*m)]
+const ELECTRON_CHARGE: f32 = 1.602176565e-19; // Electron Charge [C]
+const AMU: f32 = 1.660538921e-27; // Atomic Mass Unit [kg]
+const ELECTRON_MASS: f32 = 9.10938215e-31; // Electron Mass [kg]
+const BOLTZMANN: f32 = 1.380648e-23; // Boltzmann Constant [J/K]
+
 /*
  * init:
  * - initialize field
@@ -64,27 +71,18 @@ pub fn sim() {
 
     log::info!("Element: {}", phi[0][0][0]);
 
-
     let mut solver = PotentialSolver::new(&mut domain, 50, 0.001); 
     log::info!("Solver: {}", solver.solve());
 }
 
-/// Computes the Debye length in UNIT?
+/// Computes the Debye length in meters
 ///
-/// * `temp` - Species temperature in eV
-/// * `density` - Species density in # / m^3
+/// * `temp` - Species temperature in K
+/// * `density` - Species density in $$ \frac{#}{m^3} $$
 fn debye_length(temp: f32, density: f32) -> f32 {
 
-    // 1 eV = (q/k_b) 
-    // 1 eV ~= 11604.519 K
-    // Since temp is expresssed in eV, the boltzmann constant cancels out
-
-    let permittivity: f32 = 55.263_494_06 * 10e6; // Multiple by 10e6 to convert \frac{e^2}{GeV fm} -> \frac{e^2}{eV m}
-    // let boltzmann: f32 = 8.617_333_262_145e-5; // \frac{eV}{K}
-    // let charge: f32 = -1.0; // {e}
-
-    // Due to some unit conversions we can simplify the calculation to this
-    return ((permittivity * temp)/(density)).sqrt();
+    // $$ \lambda_D = \sqrt{\frac{\epsilon_0 k_b T_e}{n_e {q_e}^2}} $$
+    return ((PERMITTIVITY * BOLTZMANN * temp)/(density * ELECTRON_CHARGE * ELECTRON_CHARGE)).sqrt();
 }
 
 /// Represents the computational domain of the simulation as a Cartesian mesh
@@ -171,6 +169,7 @@ struct PotentialSolver<'a> {
 
 impl PotentialSolver<'_> {
 
+    /// Create a new solver
     pub fn new(domain: &mut Domain, iterations: usize, tolerance: f32) -> PotentialSolver {
         PotentialSolver {
             domain,
@@ -179,10 +178,10 @@ impl PotentialSolver<'_> {
         }
     }
 
+    /// Iteratively computes the electrical potential at each node
     pub fn solve(&mut self) -> bool {
 
-        let ep: f32 = 1.0; // Permittivity of free space
-
+        // Get local references for ease of use
         let phi = &mut self.domain.phi;
         let rho = &self.domain.rho;
 
@@ -202,7 +201,7 @@ impl PotentialSolver<'_> {
                     for k in 1..self.domain.nodes[2]-1 {
 
                         // Standard internal open node
-                        let phi_new = ((rho[i][j][k]/ep) + 
+                        let phi_new = ((rho[i][j][k]/PERMITTIVITY) + 
                                     dx2*(phi[i-1][j][k] + phi[i+1][j][k]) +
                                     dy2*(phi[i][j-1][k] + phi[i][j+1][k]) +
                                     dz2*(phi[i][j][k-1] + phi[i][j][k+1])) / 
@@ -221,7 +220,7 @@ impl PotentialSolver<'_> {
                     for j in 1..self.domain.nodes[1]-1 {
                         for k in 1..self.domain.nodes[2]-1 {
                             let r = -phi[i][j][k] * (2.0 * (dx2+dy2+dz2)) + 
-                                rho[i][j][k] / ep +
+                                rho[i][j][k] / PERMITTIVITY +
                                 dx2*(phi[i-1][j][k] + phi[i+1][j][k]) +
                                 dy2*(phi[i][j-1][k] + phi[i][j+1][k]) +
                                 dz2*(phi[i][j][k-1] + phi[i][j][k+1]);
