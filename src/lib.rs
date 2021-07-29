@@ -25,7 +25,7 @@ pub fn init() {
 /// Universal Constants
 const PERMITTIVITY: f32 = 8.8541878e-12; // Vacuum Permittivity [C/(V*m)]
 const ELECTRON_CHARGE: f32 = 1.602176565e-19; // Electron Charge [C]
-const AMU: f32 = 1.660538921e-27; // Atomic Mass Unit [kg]
+const ATOMIC_MASS: f32 = 1.660538921e-27; // Atomic Mass Unit [kg]
 const ELECTRON_MASS: f32 = 9.10938215e-31; // Electron Mass [kg]
 const BOLTZMANN: f32 = 1.380648e-23; // Boltzmann Constant [J/K]
 
@@ -56,20 +56,12 @@ const BOLTZMANN: f32 = 1.380648e-23; // Boltzmann Constant [J/K]
 #[wasm_bindgen]
 pub fn sim() {
 
-    let size = [10, 10, 10];
+    let size = [11, 11, 11];
 
     let mut domain = Domain::new(size, [0.2, 0.2, 0.2]);
 
     log::info!("Node Volume: {}", domain.node_volume());
-
-    let mut phi = Field::new(size);
-
-    log::info!("Element: {}", phi[0][0][0]);
-
-    let b = &mut phi[0][0][0];
-    *b = 3.14;
-
-    log::info!("Element: {}", phi[0][0][0]);
+    log::info!("Debye Length: {}", debye_length(9600.0, 10e11));
 
     let mut solver = PotentialSolver::new(&mut domain, 50, 0.001); 
     log::info!("Solver: {}", solver.solve());
@@ -81,17 +73,29 @@ pub fn sim() {
 /// * `density` - Species density in $$ \frac{#}{m^3} $$
 fn debye_length(temp: f32, density: f32) -> f32 {
 
+    // TODO: Figure out why this isn't producing the correct value
+    // debye_length(9600.0, 10e11) = 0.0214
+
     // $$ \lambda_D = \sqrt{\frac{\epsilon_0 k_b T_e}{n_e {q_e}^2}} $$
     return ((PERMITTIVITY * BOLTZMANN * temp)/(density * ELECTRON_CHARGE * ELECTRON_CHARGE)).sqrt();
+}
+
+/// Computes the volume of the Debye sphere in m^3
+///
+/// * `temp` - Species temperature in K
+/// * `density` - Species density in $$ \frac{#}{m^3} $$
+fn debye_volume(temp: f32, density: f32) -> f32 {
+    let length = debye_length(temp, density);
+    return length * length * length * (4.0 / 3.0) * std::f32::consts::PI;
 }
 
 /// Represents the computational domain of the simulation as a Cartesian mesh
 struct Domain {
     nodes: [usize; 3], // The number of nodes in each axis
     spacing: [f32; 3], // Space between nodes in x, y, and z
-    phi: Field, // Electric Potential
-    rho: Field, // Charge Density
-    electric_field: Field, // Electric Field Components (TODO: This needs a field that stores a 3Vec)
+    phi: Field<f32>, // Electric Potential
+    rho: Field<f32>, // Charge Density
+    electric_field: Field<[f32; 3]>, // Electric Field Components
 }
 
 impl Domain {
@@ -118,29 +122,28 @@ impl Domain {
 }
 
 /// 3D field of floats
-/// TODO: Use generics to allow it to store arbitrary types
-struct Field {
-    data: Vec<Vec<Vec<f32>>>
+struct Field<T> {
+    data: Vec<Vec<Vec<T>>>
 }
 
-impl Field {
+impl<T: Default + Clone> Field<T> {
 
     /// Create a new 3D field with dimensions x, y, z
-    pub fn new(size: [usize; 3]) -> Field {
+    pub fn new(size: [usize; 3]) -> Field<T> {
         Field {
-            data: vec![vec![vec![0.0; size[2]]; size[1]]; size[0]]
+            data: vec![vec![vec![T::default(); size[2]]; size[1]]; size[0]]
         }
     }
 
     /// Create a new 3D field with equal dimensions
-    pub fn new_cube(size: usize) -> Field {
+    pub fn new_cube(size: usize) -> Field<T> {
         Field::new([size, size, size])
     }
 }
 
 /// Support indexing into a Field as if it were a Vec
-impl Index<usize> for Field {
-    type Output = Vec<Vec<f32>>;
+impl<T> Index<usize> for Field<T> {
+    type Output = Vec<Vec<T>>;
 
     fn index(&self, i: usize) -> &Self::Output {
         &self.data[i]
@@ -148,8 +151,8 @@ impl Index<usize> for Field {
 }
 
 /// Support mutable indexing into a Field as if it were a Vec
-impl IndexMut<usize> for Field {
-    fn index_mut(&mut self, i: usize) -> &mut Vec<Vec<f32>> {
+impl<T> IndexMut<usize> for Field<T> {
+    fn index_mut(&mut self, i: usize) -> &mut Vec<Vec<T>> {
         self.data.index_mut(i)
     }
 }
@@ -243,6 +246,7 @@ impl PotentialSolver<'_> {
 
     /// Computes the electric field $$-\nabla{\phi}$$
     pub fn compute_electric_field(&self) {
+        todo!();
     }
 }
 
